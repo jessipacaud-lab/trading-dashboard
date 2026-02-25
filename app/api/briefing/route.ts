@@ -23,13 +23,37 @@ async function fetchMarketData(symbols?: string[]): Promise<AssetSnapshot[]> {
 // ── Format one asset snapshot for the prompt ──────────────────────────────────
 
 function formatAssetForPrompt(snap: AssetSnapshot): string {
-  const dir    = snap.changePct >= 0 ? '▲' : '▼'
-  // Only last 3 D1 bars to keep prompt short and fast
-  const d1Lines = snap.barsD1.slice(-3).map(b =>
-    `${b.date}|O:${b.open}|H:${b.high}|L:${b.low}|C:${b.close}`
-  ).join(' / ')
+  const dir = snap.changePct >= 0 ? '▲' : '▼'
 
-  return `${snap.symbol}: prix=${snap.price}(${dir}${Math.abs(snap.changePct)}%) EMA20=${snap.ema20 ?? '?'} EMA50=${snap.ema50 ?? '?'} RSI=${snap.rsi14 ?? '?'} ATR=${snap.atr14 ?? '?'} 52W[${snap.low52w}-${snap.high52w}] D1(3j):${d1Lines}`
+  // ── D1 : 3 dernières bougies (structure de fond)
+  const d1Lines = snap.barsD1.slice(-3).map(b =>
+    `${b.date} O:${b.open} H:${b.high} L:${b.low} C:${b.close}`
+  ).join(' | ')
+
+  // ── H1 : 8 dernières bougies (contexte intraday récent)
+  const h1Lines = snap.barsH1.slice(-8).map(b =>
+    `${b.date.slice(11, 16)} O:${b.open} H:${b.high} L:${b.low} C:${b.close}`
+  ).join(' | ')
+
+  // ── H1 trend label
+  const trendLabel = snap.h1Trend === 'up'   ? '↑ HAUSSIER'
+                   : snap.h1Trend === 'down' ? '↓ BAISSIER'
+                   : snap.h1Trend === 'flat' ? '→ LATERAL'
+                   : '?'
+
+  return [
+    `### ${snap.symbol}`,
+    `Prix: ${snap.price} (${dir}${Math.abs(snap.changePct)}%) | Open: ${snap.open} | PrevClose: ${snap.prevClose}`,
+    `Range 52S: ${snap.low52w} – ${snap.high52w}`,
+    ``,
+    `[TENDANCE D1 — structure de fond]`,
+    `  EMA20=${snap.ema20 ?? '?'} | EMA50=${snap.ema50 ?? '?'} | RSI14=${snap.rsi14 ?? '?'} | ATR14=${snap.atr14 ?? '?'}`,
+    `  D1 (3 bougies): ${d1Lines}`,
+    ``,
+    `[INTRADAY H1 — momentum du jour]`,
+    `  Tendance H1: ${trendLabel} | EMA9=${snap.h1Ema9 ?? '?'} | EMA21=${snap.h1Ema21 ?? '?'} | RSI14=${snap.h1Rsi14 ?? '?'} | ATR14=${snap.h1Atr14 ?? '?'}`,
+    `  H1 (8 bougies récentes): ${h1Lines || 'indisponible'}`,
+  ].join('\n')
 }
 
 // ── Build prompt ──────────────────────────────────────────────────────────────
@@ -59,7 +83,13 @@ function buildPrompt(
     : ''
 
   const dataInstruction = hasData
-    ? `Données réelles Yahoo Finance ci-dessous. Utilise EXCLUSIVEMENT ces chiffres pour les niveaux (pas de niveaux inventés).`
+    ? `Données réelles Yahoo Finance ci-dessous (D1 + H1 authentiques). Utilise EXCLUSIVEMENT ces chiffres.
+MÉTHODE D'ANALYSE :
+1. D1 (EMA20/50, RSI14) → tendance de fond et structure macro
+2. H1 (EMA9/21, RSI14, 8 bougies) → momentum intraday, biais du jour, zones d'entrée précises
+3. Croise D1 + H1 : si D1 bullish ET H1 uptrend → forte conviction. Si D1 bullish mais H1 downtrend → attendre pullback H1.
+4. Support/résistance : base-toi sur les H/L des bougies H1 et D1 fournies, pas sur des niveaux génériques.
+5. RSI H1 > 70 → surachat, prudence long. RSI H1 < 30 → survente, opportunité long.`
     : `Pas de données temps réel. Utilise ta connaissance des niveaux actuels du marché.`
 
   // Slot-specific instructions
@@ -80,8 +110,8 @@ ${marketDataSection}
 
 Réponds UNIQUEMENT en JSON valide, sans markdown ni texte autour. Génère les ${assets.length} actifs dans cet ordre : ${assets.join(', ')}.
 
-Format exact (sois concis, 1-2 phrases par champ texte) :
-{"generated_at":"${time}","data_source":"${hasData ? 'live' : 'estimate'}","macro_summary":"3 phrases max sur contexte macro actuel","assets":[{"symbol":"EURUSD","bias":"bullish|bearish|range|volatile","conviction":7,"price":${hasData ? (snapshots.find(s=>s.symbol==='EURUSD')?.price ?? 0) : 0},"analysis":"Structure marché + EMAs + RSI en 2 phrases","support":"niveau","resistance":"niveau","key_level":"OB/FVG/Pivot clé","catalysts":["cat1"],"setup":"Direction, entrée, TP, SL concrets"}]}`
+Format JSON strict (aucun texte hors JSON) :
+{"generated_at":"${time}","data_source":"${hasData ? 'live' : 'estimate'}","macro_summary":"3 phrases sur contexte macro : sentiment risk-on/off, DXY, VIX, corrélations clés","assets":[{"symbol":"EURUSD","bias":"bullish|bearish|range|volatile","conviction":7,"price":${hasData ? (snapshots.find(s=>s.symbol==='EURUSD')?.price ?? 0) : 0},"analysis":"1 phrase D1 (tendance fond) + 1 phrase H1 (momentum intraday + RSI H1 + position vs EMA9/21)","support":"niveau H1/D1 précis issu des données","resistance":"niveau H1/D1 précis issu des données","key_level":"niveau critique H1 ou D1 (OB/FVG/Pivot/EMA)","catalysts":["catalyseur1"],"setup":"Entrée précise basée H1 : direction, zone entrée, TP1, SL (en pips ou points selon actif)"}]}`
 }
 
 // ── Claude call ───────────────────────────────────────────────────────────────

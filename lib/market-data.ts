@@ -96,11 +96,18 @@ export interface AssetSnapshot {
   low52w:      number
   changePct:   number
   barsD1:      OHLCVBar[]
-  barsH4:      OHLCVBar[]
+  barsH1:      OHLCVBar[]   // vraies barres H1 (48 dernières)
+  // Indicateurs D1 (tendance de fond)
   ema20:       number | null
   ema50:       number | null
   rsi14:       number | null
   atr14:       number | null
+  // Indicateurs H1 (intraday)
+  h1Ema9:      number | null
+  h1Ema21:     number | null
+  h1Rsi14:     number | null
+  h1Atr14:     number | null
+  h1Trend:     'up' | 'down' | 'flat' | null  // EMA9 vs EMA21
 }
 
 // ── Calculs techniques ────────────────────────────────────────────────────────
@@ -183,56 +190,56 @@ export async function buildSnapshot(symbol: string): Promise<AssetSnapshot> {
   const ticker  = YAHOO_MAP[symbol]
   if (!ticker) throw new Error(`No ticker for ${symbol}`)
 
-  // period1 must be a Date object (not unix seconds) for yahoo-finance2 chart()
-  const period1 = new Date(Date.now() - 92 * 24 * 60 * 60 * 1000)
+  // D1: 3 months for indicators
+  const period1D1 = new Date(Date.now() - 92 * 24 * 60 * 60 * 1000)
+  // H1: last 7 days (Yahoo allows up to 60d for 1h interval)
+  const period1H1 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
-  // Fetch quote + chart (D1, 3 months) in parallel
-  const [quoteRaw, chartRaw] = await Promise.all([
+  // Fetch quote + D1 chart + H1 chart in parallel
+  const [quoteRaw, chartD1Raw, chartH1Raw] = await Promise.all([
     yf.quote(ticker, {}, { validateResult: false }),
-    yf.chart(ticker, { period1: period1.toISOString().slice(0, 10), interval: '1d' }, { validateResult: false }),
+    yf.chart(ticker, { period1: period1D1.toISOString().slice(0, 10), interval: '1d'  }, { validateResult: false }),
+    yf.chart(ticker, { period1: period1H1.toISOString().slice(0, 10), interval: '1h'  }, { validateResult: false })
+      .catch(() => ({ quotes: [] } as Record<string, unknown>)), // fallback if H1 unavailable
   ])
 
-  const barsD1All = parseChartBars(chartRaw)
-  const barsD1    = barsD1All.slice(-60)
-  const last10D1  = barsD1.slice(-10)
-  const closes    = barsD1.map(b => b.close)
+  const barsD1All  = parseChartBars(chartD1Raw)
+  const barsD1     = barsD1All.slice(-60)
+  const last10D1   = barsD1.slice(-10)
+  const closesD1   = barsD1.map(b => b.close)
 
-  // H4 approximation: 2 pseudo-bars per day (morning / afternoon split)
-  const barsH4: OHLCVBar[] = last10D1.flatMap(d => [
-    {
-      date:   d.date,
-      open:   d.open,
-      high:   d.high,
-      low:    Math.round(((d.open + d.low)   / 2) * 10000) / 10000,
-      close:  Math.round(((d.open + d.close) / 2) * 10000) / 10000,
-      volume: Math.floor(d.volume / 2),
-    },
-    {
-      date:   d.date,
-      open:   Math.round(((d.open + d.close) / 2) * 10000) / 10000,
-      high:   d.high,
-      low:    d.low,
-      close:  d.close,
-      volume: Math.floor(d.volume / 2),
-    },
-  ]).slice(-10)
+  // Real H1 bars — last 48 candles (2 trading days)
+  const barsH1All  = parseChartBars(chartH1Raw)
+  const barsH1     = barsH1All.slice(-48)
+  const closesH1   = barsH1.map(b => b.close)
+
+  // H1 trend from EMA9 vs EMA21
+  const h1Ema9  = calcEMA(closesH1, 9)
+  const h1Ema21 = calcEMA(closesH1, 21)
+  let h1Trend: 'up' | 'down' | 'flat' | null = null
+  if (h1Ema9 !== null && h1Ema21 !== null) {
+    const diff = (h1Ema9 - h1Ema21) / h1Ema21
+    if (diff > 0.0005)       h1Trend = 'up'
+    else if (diff < -0.0005) h1Trend = 'down'
+    else                     h1Trend = 'flat'
+  }
 
   const q         = quoteRaw
-  const chartMeta = (chartRaw.meta as Record<string, unknown>) ?? {}
+  const chartMeta = (chartD1Raw.meta as Record<string, unknown>) ?? {}
   const price     = (q.regularMarketPrice          as number)
                  ?? (chartMeta.regularMarketPrice   as number)
-                 ?? closes[closes.length - 1] ?? 0
+                 ?? closesD1[closesD1.length - 1] ?? 0
   const prevClose = (q.regularMarketPreviousClose  as number)
                  ?? (chartMeta.chartPreviousClose   as number)
-                 ?? closes[closes.length - 2] ?? 0
+                 ?? closesD1[closesD1.length - 2] ?? 0
   const open      = (q.regularMarketOpen           as number)
                  ?? last10D1[last10D1.length - 1]?.open ?? 0
   const high52w   = (q.fiftyTwoWeekHigh            as number)
                  ?? (chartMeta.fiftyTwoWeekHigh     as number)
-                 ?? (closes.length ? Math.max(...closes) : 0)
+                 ?? (closesD1.length ? Math.max(...closesD1) : 0)
   const low52w    = (q.fiftyTwoWeekLow             as number)
                  ?? (chartMeta.fiftyTwoWeekLow      as number)
-                 ?? (closes.length ? Math.min(...closes) : 0)
+                 ?? (closesD1.length ? Math.min(...closesD1) : 0)
   const changePct = prevClose > 0 ? Math.round(((price - prevClose) / prevClose) * 10000) / 100 : 0
 
   return {
@@ -245,11 +252,18 @@ export async function buildSnapshot(symbol: string): Promise<AssetSnapshot> {
     low52w:    Math.round(low52w    * 100)   / 100,
     changePct,
     barsD1:    last10D1,
-    barsH4,
-    ema20:     calcEMA(closes, 20),
-    ema50:     calcEMA(closes, 50),
-    rsi14:     calcRSI(closes),
+    barsH1,
+    // D1 indicators (tendance de fond)
+    ema20:     calcEMA(closesD1, 20),
+    ema50:     calcEMA(closesD1, 50),
+    rsi14:     calcRSI(closesD1),
     atr14:     calcATR(barsD1),
+    // H1 indicators (intraday)
+    h1Ema9,
+    h1Ema21,
+    h1Rsi14:   calcRSI(closesH1),
+    h1Atr14:   calcATR(barsH1),
+    h1Trend,
   }
 }
 
