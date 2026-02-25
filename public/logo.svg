@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="220" viewBox="0 0 920 220" fill="none">
+  <!-- Icon -->
+  <rect x="24" y="30" width="160" height="160" rx="40" fill="#0B1220"/>
+  <rect x="24" y="30" width="160" height="160" rx="40" stroke="rgba(148,163,184,0.18)" stroke-width="2"/>
+
+  <!-- Top bar (window) -->
+  <rect x="52" y="62" width="104" height="22" rx="11" fill="rgba(148,163,184,0.10)"/>
+  <circle cx="64" cy="73" r="4" fill="rgba(231,234,240,0.75)"/>
+  <circle cx="78" cy="73" r="4" fill="rgba(231,234,240,0.45)"/>
+  <circle cx="92" cy="73" r="4" fill="rgba(231,234,240,0.30)"/>
+
+  <!-- Data lines -->
+  <rect x="52" y="100" width="78" height="10" rx="5" fill="rgba(231,234,240,0.75)"/>
+  <rect x="52" y="120" width="104" height="10" rx="5" fill="rgba(231,234,240,0.35)"/>
+  <rect x="52" y="140" width="60" height="10" rx="5" fill="rgba(231,234,240,0.22)"/>
+
+  <!-- Signal dot -->
+  <circle cx="146" cy="145" r="7" fill="#7AA7FF"/>
+
+  <!-- Wordmark -->
+  <text x="210" y="128" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="56" font-weight="750" fill="#E7EAF0">
+    Marketdesk
+  </text>
+  <text x="212" y="166" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="16" font-weight="500" fill="#9AA6B2">
+    Your pre-market operating system
+  </text>
+</svg>

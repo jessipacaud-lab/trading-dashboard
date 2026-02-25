@@ -1,0 +1,143 @@
+/* ── Inter font (Marketdesk standard) ──────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS Variables — Marketdesk Design Tokens ───────────────────────────── */
+:root {
+  --md-night:    #070A12;
+  --md-surface:  #0B1220;
+  --md-surface2: #0F1A2B;
+  --md-surface3: #101F36;
+  --md-text:     #E7EAF0;
+  --md-text2:    #B6C2D1;
+  --md-muted:    #9AA6B2;
+  --md-blue:     #7AA7FF;
+  --md-cyan:     #59E6D6;
+  --md-bearish:  #FF5C7A;
+  --md-warn:     #FFC24A;
+  --border:      rgba(148,163,184,0.14);
+  --divider:     rgba(148,163,184,0.10);
+}
+
+/* ── Base reset ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: #070A12;
+  color:            #E7EAF0;
+  font-family:      'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size:        14px;
+  line-height:      1.6;
+  font-weight:      400;
+}
+
+/* ── Scrollbar — minimal, institutionnel ─────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.18); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(122,167,255,0.35); }
+
+/* ── Keyframes ───────────────────────────────────────────────────────────── */
+@keyframes skeleton-anim {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes signal-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(122,167,255,0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(122,167,255,0); }
+}
+
+/* ── Utility classes ─────────────────────────────────────────────────────── */
+
+.animate-skeleton {
+  background: linear-gradient(90deg,
+    #0B1220 25%, #0F1A2B 50%, #0B1220 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-anim 1.5s ease-in-out infinite;
+}
+
+/* Signal dot — signature Marketdesk */
+.signal-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #7AA7FF;
+  animation: signal-pulse 2.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.signal-dot-sm {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #7AA7FF;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+/* AI typing cursor */
+.ai-typing::after {
+  content: '▋';
+  animation: pulse-dot 0.7s step-end infinite;
+  color: #7AA7FF;
+}
+
+/* Card base */
+.md-card {
+  background:    #0B1220;
+  border-radius: 20px;
+  border:        1px solid rgba(148,163,184,0.14);
+  box-shadow:    0 0 0 1px rgba(148,163,184,0.12), 0 12px 28px rgba(0,0,0,0.35);
+}
+.md-card:hover {
+  box-shadow: 0 0 0 1px rgba(148,163,184,0.18), 0 16px 32px rgba(0,0,0,0.40);
+}
+
+/* Nav active state */
+.nav-active {
+  background:   rgba(122,167,255,0.10) !important;
+  border-left:  2px solid #7AA7FF !important;
+  color:        #7AA7FF !important;
+}
+
+/* Hairline borders */
+.border-hairline { border-color: rgba(148,163,184,0.14); }
+.divide-hairline > * + * { border-top-color: rgba(148,163,184,0.10); }
+
+/* Focus ring */
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(122,167,255,0.45);
+}
+
+/* TradingView widget */
+.tradingview-widget-container,
+.tradingview-widget-container__widget {
+  height: 100% !important;
+  width:  100% !important;
+}
+
+/* ── Transitions globales ────────────────────────────────────────────────── */
+a, button, [role="button"] {
+  transition: color 150ms ease, background-color 150ms ease,
+              border-color 150ms ease, box-shadow 150ms ease,
+              opacity 150ms ease;
+}
