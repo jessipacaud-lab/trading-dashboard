@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { PreMarketChecklist } from '@/components/checklist/PreMarketChecklist'
-import { Settings2, CheckSquare, Info, Brain, Key, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-react'
+import { Settings2, CheckSquare, Info, Brain, Key, CheckCircle2, XCircle, Eye, EyeOff, RefreshCw, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type Tab = 'checklist' | 'briefing' | 'about'
@@ -16,9 +16,11 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 // ── Briefing settings tab ─────────────────────────────────────────────────────
 
 function BriefingSettings() {
-  const [apiKey, setApiKey]       = useState('')
-  const [showKey, setShowKey]     = useState(false)
-  const [saved, setSaved]         = useState(false)
+  const [apiKey, setApiKey]         = useState('')
+  const [showKey, setShowKey]       = useState(false)
+  const [saved, setSaved]           = useState(false)
+  const [forcing, setForcing]       = useState(false)
+  const [forceMsg, setForceMsg]     = useState('')
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -38,6 +40,24 @@ function BriefingSettings() {
   const handleClear = () => {
     setApiKey('')
     localStorage.removeItem('anthropic_key')
+  }
+
+  const handleForceGenerate = () => {
+    const key = localStorage.getItem('anthropic_key') ?? ''
+    if (!key || !key.startsWith('sk-')) {
+      setForceMsg('Enregistrez d\'abord votre clé API.')
+      setTimeout(() => setForceMsg(''), 3000)
+      return
+    }
+    setForcing(true)
+    setForceMsg('Génération lancée…')
+    // Dispatch custom event — AIDailyBriefing écoute cet event
+    window.dispatchEvent(new Event('briefing:force'))
+    setTimeout(() => {
+      setForcing(false)
+      setForceMsg('✓ Briefing en cours de génération sur le dashboard.')
+      setTimeout(() => setForceMsg(''), 4000)
+    }, 1000)
   }
 
   return (
@@ -145,6 +165,29 @@ function BriefingSettings() {
           <span className="w-2 h-2 rounded-full bg-[#00e5a0]" />
           Lundi au vendredi uniquement — ~10 appels API par semaine
         </div>
+      </div>
+
+      {/* Force generate */}
+      <div className="bg-surface-800 border border-white/5 rounded-xl p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Zap className="w-3.5 h-3.5 text-[#f59e0b]" />
+          <p className="text-[11px] font-semibold text-gray-200">Génération manuelle</p>
+        </div>
+        <p className="text-[10px] text-gray-500">
+          Force la génération immédiate du briefing pour le slot actuel (ignore le cache).
+          Utile pour tester ou si la génération automatique n&apos;a pas fonctionné.
+        </p>
+        <button
+          onClick={handleForceGenerate}
+          disabled={forcing || !isValid}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-medium text-[#f59e0b] bg-[#f59e0b12] border border-[#f59e0b33] hover:bg-[#f59e0b20] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${forcing ? 'animate-spin' : ''}`} />
+          Générer maintenant
+        </button>
+        {forceMsg && (
+          <p className="text-[10px] text-accent-cyan">{forceMsg}</p>
+        )}
       </div>
 
     </div>

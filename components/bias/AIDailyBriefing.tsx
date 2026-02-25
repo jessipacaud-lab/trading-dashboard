@@ -94,7 +94,6 @@ export function AIDailyBriefing() {
   const [state, setState]           = useState<BriefingState>('waiting')
   const [briefing, setBriefing]     = useState<DailyBriefing | null>(null)
   const [errorMsg, setErrorMsg]     = useState('')
-  const [loading, setLoading]       = useState(false)
   const [activeSlot, setActiveSlot] = useState<'8h' | '14h' | null>(null)
   const [symbols, setSymbols]       = useState<string[]>([])
   const [waitReason, setWaitReason] = useState<WaitingReason>('before-8h')
@@ -122,19 +121,20 @@ export function AIDailyBriefing() {
     slot:        '8h' | '14h',
     assetList:   string[],
     morningCtx?: string,
+    force?:      boolean,
   ) => {
     if (generatingRef.current) return
     generatingRef.current = true
 
     setState('loading')
-    setLoading(true)
+    setActiveSlot(slot)
     try {
       const res = await fetch('/api/briefing', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           apiKey:         key,
-          forceRefresh:   false,
+          forceRefresh:   force ?? false,
           assets:         assetList,
           slot,
           morningContext: morningCtx,
@@ -157,13 +157,16 @@ export function AIDailyBriefing() {
       setErrorMsg(e instanceof Error ? e.message : 'Erreur inconnue')
       setState('error')
     } finally {
-      setLoading(false)
       generatingRef.current = false
     }
   }, [])
 
-  // ── Decision function: check what should happen right now ──────────────────
-  const checkAndTrigger = useCallback((currentSymbols: string[]) => {
+  // ── Core logic: read state and decide what to do ───────────────────────────
+  // Uses a ref to always have access to latest generate without stale closure
+  const generateRef = useRef(generate)
+  useEffect(() => { generateRef.current = generate }, [generate])
+
+  const runCheck = useCallback((currentSymbols: string[], force = false) => {
     const key = localStorage.getItem('anthropic_key') ?? ''
 
     // No key → show settings prompt
@@ -188,12 +191,12 @@ export function AIDailyBriefing() {
     const cache14h = localStorage.getItem(`briefing_14h_${dateStr}_${assetSuffix}`)
     const cache8h  = localStorage.getItem(`briefing_8h_${dateStr}_${assetSuffix}`)
 
-    // Already generating — skip
-    if (generatingRef.current) return
+    // Already generating — skip (unless forced)
+    if (generatingRef.current && !force) return
 
     if (hour >= 14) {
-      // 14H slot — try cache first
-      if (cache14h) {
+      // 14H slot — try cache first (unless force)
+      if (!force && cache14h) {
         try {
           const data = JSON.parse(cache14h) as DailyBriefing
           setBriefing({ ...data, fromCache: true })
@@ -207,11 +210,11 @@ export function AIDailyBriefing() {
       if (cache8h) {
         try { morningCtx = (JSON.parse(cache8h) as DailyBriefing).macro_summary } catch { /* ignore */ }
       }
-      generate(key, '14h', currentSymbols, morningCtx)
+      generateRef.current(key, '14h', currentSymbols, morningCtx, force)
 
     } else if (hour >= 8) {
-      // 8H slot — try cache first
-      if (cache8h) {
+      // 8H slot — try cache first (unless force)
+      if (!force && cache8h) {
         try {
           const data = JSON.parse(cache8h) as DailyBriefing
           setBriefing({ ...data, fromCache: true })
@@ -221,42 +224,57 @@ export function AIDailyBriefing() {
         } catch { /* ignore */ }
       }
       // Generate 8H
-      generate(key, '8h', currentSymbols)
+      generateRef.current(key, '8h', currentSymbols, undefined, force)
 
     } else {
       // Before 8H — just wait
       setState('waiting')
       setWaitReason('before-8h')
     }
-  }, [generate])
+  }, [])
 
   // ── On mount: restore cache or trigger generation ──────────────────────────
   useEffect(() => {
     const currentAssets = loadSymbols('briefing')
     setSymbols(currentAssets)
-    checkAndTrigger(currentAssets)
+    // Small delay to ensure localStorage is available after hydration
+    const t = setTimeout(() => runCheck(currentAssets), 300)
+    return () => clearTimeout(t)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Interval: poll every 60s to catch slot transitions ────────────────────
   useEffect(() => {
     const id = setInterval(() => {
-      // If 8H briefing is shown and it's now 14H → upgrade to 14H slot
-      if (state === 'ready' && activeSlot === '8h') {
-        if (new Date().getHours() >= 14) {
-          const currentAssets = loadSymbols('briefing')
-          checkAndTrigger(currentAssets)
-        }
-        return
-      }
       // Don't interrupt an active load
       if (state === 'loading') return
 
       const currentAssets = loadSymbols('briefing')
-      checkAndTrigger(currentAssets)
+
+      // If 8H briefing is shown and it's now 14H → upgrade to 14H slot
+      if (state === 'ready' && activeSlot === '8h' && new Date().getHours() >= 14) {
+        runCheck(currentAssets)
+        return
+      }
+
+      // If waiting (not ready/loading), keep checking
+      if (state !== 'ready') {
+        runCheck(currentAssets)
+      }
     }, 60000)
     return () => clearInterval(id)
-  }, [state, activeSlot, checkAndTrigger])
+  }, [state, activeSlot, runCheck])
+
+  // ── Exposed force-generate for Settings page ───────────────────────────────
+  // Listens for a custom event dispatched by settings page
+  useEffect(() => {
+    const handler = () => {
+      const currentAssets = loadSymbols('briefing')
+      runCheck(currentAssets, true) // force = true, ignore cache
+    }
+    window.addEventListener('briefing:force', handler)
+    return () => window.removeEventListener('briefing:force', handler)
+  }, [runCheck])
 
   // ── Status badge ──────────────────────────────────────────────────────────
   const statusBadge = () => {
